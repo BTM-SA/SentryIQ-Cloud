@@ -1,0 +1,55 @@
+<?php
+
+declare(strict_types=1);
+
+namespace SentryIQCloud\Gallery\Storage;
+
+use RuntimeException;
+
+final class PhotoStorage
+{
+    public function __construct(private readonly string $root)
+    {
+        if ($this->root === '' || !str_starts_with($this->root, '/')) {
+            throw new RuntimeException('Gallery storage root must be an absolute path.');
+        }
+    }
+
+    /** @return array{photo_id:string, path:string, thumbnail_path:string, created_at:int} */
+    public function store(string $webp, string $contentHash): array
+    {
+        if ($webp === '' || !preg_match('/^[a-f0-9]{64}$/', $contentHash)) {
+            throw new RuntimeException('Invalid image data or content hash.');
+        }
+
+        $photoId = bin2hex(random_bytes(16));
+        $bucket = substr($contentHash, 0, 2);
+        $directory = rtrim($this->root, '/') . '/photos/' . $bucket;
+        $thumbDirectory = rtrim($this->root, '/') . '/thumbnails/' . $bucket;
+
+        $this->ensureDirectory($directory);
+        $this->ensureDirectory($thumbDirectory);
+
+        $path = $directory . '/' . $photoId . '.webp';
+        $thumbnailPath = $thumbDirectory . '/' . $photoId . '.webp';
+
+        if (file_put_contents($path, $webp, LOCK_EX) === false) {
+            throw new RuntimeException('Unable to store gallery image.');
+        }
+
+        return [
+            'photo_id' => $photoId,
+            'path' => $path,
+            'thumbnail_path' => $thumbnailPath,
+            'created_at' => time(),
+        ];
+    }
+
+    private function ensureDirectory(string $directory): void
+    {
+        if (is_dir($directory)) return;
+        if (!mkdir($directory, 0750, true) && !is_dir($directory)) {
+            throw new RuntimeException('Unable to create gallery storage directory.');
+        }
+    }
+}
