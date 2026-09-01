@@ -16,9 +16,9 @@ final class PhotoStorage
     }
 
     /** @return array{photo_id:string, path:string, thumbnail_path:string, created_at:int} */
-    public function store(string $webp, string $contentHash): array
+    public function store(string $webp, string $thumbnail, string $contentHash): array
     {
-        if ($webp === '' || !preg_match('/^[a-f0-9]{64}$/', $contentHash)) {
+        if ($webp === '' || $thumbnail === '' || !preg_match('/^[a-f0-9]{64}$/', $contentHash)) {
             throw new RuntimeException('Invalid image data or content hash.');
         }
 
@@ -36,6 +36,14 @@ final class PhotoStorage
         if (file_put_contents($path, $webp, LOCK_EX) === false) {
             throw new RuntimeException('Unable to store gallery image.');
         }
+
+        if (file_put_contents($thumbnailPath, $thumbnail, LOCK_EX) === false) {
+            @unlink($path);
+            throw new RuntimeException('Unable to store gallery thumbnail.');
+        }
+
+        chmod($path, 0640);
+        chmod($thumbnailPath, 0640);
 
         return [
             'photo_id' => $photoId,
