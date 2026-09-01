@@ -6,6 +6,7 @@ namespace SentryIQCloud\Gallery;
 
 use RuntimeException;
 use SentryIQCloud\Gallery\Image\ImageProcessor;
+use SentryIQCloud\Gallery\Image\ThumbnailGenerator;
 use SentryIQCloud\Gallery\Storage\DuplicateIndex;
 use SentryIQCloud\Gallery\Storage\PhotoStorage;
 
@@ -13,6 +14,7 @@ final class UploadService
 {
     public function __construct(
         private readonly ImageProcessor $processor,
+        private readonly ThumbnailGenerator $thumbnailGenerator,
         private readonly DuplicateIndex $duplicateIndex,
         private readonly PhotoStorage $storage,
     ) {
@@ -64,7 +66,8 @@ final class UploadService
                 ];
             }
 
-            $stored = $this->storage->store($webp, $hash);
+            $thumbnail = $this->thumbnailGenerator->fromWebp($webp);
+            $stored = $this->storage->store($webp, $thumbnail, $hash);
             $this->duplicateIndex->add($hash, $stored['photo_id']);
 
             return [
