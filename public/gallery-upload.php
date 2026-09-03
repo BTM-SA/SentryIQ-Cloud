@@ -2,13 +2,12 @@
 
 declare(strict_types=1);
 
-use SentryIQCloud\Contracts\AuthenticationInterface;
-use SentryIQCloud\Contracts\CsrfTokenInterface;
 use SentryIQCloud\Gallery\Image\ImageProcessor;
 use SentryIQCloud\Gallery\Image\ThumbnailGenerator;
 use SentryIQCloud\Gallery\Storage\DuplicateIndex;
 use SentryIQCloud\Gallery\Storage\PhotoStorage;
 use SentryIQCloud\Gallery\UploadService;
+use SentryIQCloud\Integration\SentryIQ\SentryIQSession;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
@@ -21,28 +20,27 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-/**
- * The host application must provide these dependencies from its authenticated
- * SentryIQ session. Cloud deliberately does not create a second credential
- * or session system for the Gallery.
- */
-$auth = $GLOBALS['sentryIqCloudAuthentication'] ?? null;
-$csrf = $GLOBALS['sentryIqCloudCsrf'] ?? null;
-
-if (!$auth instanceof AuthenticationInterface || !$csrf instanceof CsrfTokenInterface) {
+try {
+    // The host SentryIQ application must bootstrap its existing secure session
+    // before this endpoint is reached. Cloud does not create another session.
+    $sentryIqSession = new SentryIQSession();
+} catch (Throwable $exception) {
     http_response_code(503);
-    echo json_encode(['status' => 'error', 'message' => 'Gallery authentication is not configured.']);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Gallery authentication is not configured.',
+    ]);
     exit;
 }
 
-if (!$auth->isAuthenticated()) {
+if (!$sentryIqSession->isAuthenticated()) {
     http_response_code(401);
     echo json_encode(['status' => 'error', 'message' => 'Authentication required.']);
     exit;
 }
 
 $csrfToken = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['_csrf'] ?? '');
-if (!is_string($csrfToken) || !$csrf->isValid($csrfToken)) {
+if (!is_string($csrfToken) || !$sentryIqSession->isValid($csrfToken)) {
     http_response_code(403);
     echo json_encode(['status' => 'error', 'message' => 'Invalid security token.']);
     exit;
@@ -78,5 +76,6 @@ foreach ($errors as $index => $error) {
 
 echo json_encode([
     'status' => 'complete',
+    'user' => $sentryIqSession->userId(),
     'results' => $results,
 ], JSON_UNESCAPED_SLASHES);
